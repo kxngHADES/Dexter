@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Object Detection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        #video {
+            border: 2px solid #333;
+            max-width: 100%;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Real-Time Object Detection</h1>
+    <div style="position: relative;">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Access the camera
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    setInterval(detectObjects, 100); // Detect objects every 100ms
+                };
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+            }
+        }
+
+        // Send frame to backend for detection
+        async function detectObjects() {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = canvas.toDataURL('image/jpeg', 0.8); // Convert frame to base64
+
+            const response = await fetch('http://localhost:5000/detect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: imageData })
+            });
+
+            const detections = await response.json();
+            drawDetections(detections);
+        }
+
+        // Draw bounding boxes and labels
+        function drawDetections(detections) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            detections.forEach(detection => {
+                const [x1, y1, x2, y2] = detection.box;
+                ctx.strokeStyle = '#00FF00';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+                ctx.fillStyle = '#00FF00';
+                ctx.font = '16px Arial';
+                ctx.fillText(`${detection.label} (${Math.round(detection.score * 100)}%)`, x1, y1 - 5);
+            });
+        }
+
+        startCamera();
+    </script>
+</body>
+</html>
